@@ -485,6 +485,8 @@ Class RestComponent extends Component {
 
 			if (is_array($log)) {
 				$res = $this->RestLog()->save($log);
+			} else {
+				$res = null;
 			}
 
 			$this->cbRestlogAfterSave();
