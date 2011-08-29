@@ -140,17 +140,27 @@ Class RestComponent extends Component {
 	 */
 	public $isActive = null;
 
-	public function initialize (&$Controller, $settings = array()) {
-		$this->Controller = $Controller;
-
+	public function __construct(ComponentCollection $collection, $settings = array()) {
 		if (is_array($config = Configure::read('Rest.settings'))) {
-			$this->_settings = Set::merge($this->_settings, $config);
+			$settings = Set::merge($this->_settings, $config);
 		}
-		$this->_settings = Set::merge($this->_settings, $settings);
 
+		$settings = array_merge($this->settings, (array)$settings);
+
+		$this->Controller = $collection->getController();
+
+		$this->request = $this->Controller->request;
+
+		$this->_verifyControllersPath();
+
+		parent::__construct($collection, $settings);
+	}
+
+	public function initialize (&$Controller) {
 		if (!$this->isActive()) {
 			return;
 		}
+
 		// Control Debug
 		$this->_settings['debug'] = (int)$this->_settings['debug'];
 		Configure::write('debug', $this->_settings['debug']);
@@ -162,8 +172,8 @@ Class RestComponent extends Component {
 		$this->log(array(
 			'controller' => $this->Controller->name,
 			'action' => $this->Controller->action,
-			'model_id' => @$this->Controller->passedArgs[0]
-				? @$this->Controller->passedArgs[0]
+			'model_id' => @$this->request->passedArgs[0]
+				? @$this->request->passedArgs[0]
 				: 0,
 			'ratelimited' => 0,
 			'requested' => date('Y-m-d H:i:s'),
@@ -172,7 +182,7 @@ Class RestComponent extends Component {
 		));
 
 		// Validate & Modify Post
-		$this->postData = $this->_modelizePost($this->Controller->data);
+		$this->postData = $this->_modelizePost($this->request->data);
 		if ($this->postData === false) {
 			return $this->abort('Invalid post data');
 		}
@@ -314,8 +324,8 @@ Class RestComponent extends Component {
 		$callback = false;
 		$json_callback_keys = array('jsoncallback', 'callback');
 		foreach ($json_callback_keys as $key) {
-			if (array_key_exists($key, $this->Controller->params['url'])) {
-				$callback = $this->Controller->params['url'][$key];
+			if (array_key_exists($key, $this->request->params['url'])) {
+				$callback = $this->request->params['url'][$key];
 			}
 		}
 		if ($callback) {
@@ -608,7 +618,8 @@ Class RestComponent extends Component {
 
 				$debug = false;
 				if (!class_exists($className)) {
-					if (!App::import('Controller', $controller)) {
+					App::uses($controller, 'Controller')
+					if (!App::load($controller)) {
 						continue;
 					}
 				}
@@ -701,12 +712,12 @@ Class RestComponent extends Component {
 				}
 			}
 
-			if (!isset($this->Controller->request->params['url']['ext'])) {
+			if (!isset($this->request->params['url']['ext'])) {
 				return false;
 			}
 
 			return $this->isActive = in_array(
-				$this->Controller->request->params['url']['ext'],
+				$this->request->params['url']['ext'],
 				$this->_settings['extensions']
 			);
 		}
@@ -894,7 +905,7 @@ Class RestComponent extends Component {
 		}
 
 		if ($ext === null) {
-			$ext = $this->Controller->params['url']['ext'];
+			$ext = $this->request->params['url']['ext'];
 		}
 
 		$base = Inflector::camelize($ext);
