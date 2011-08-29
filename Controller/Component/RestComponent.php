@@ -18,7 +18,8 @@ Class RestComponent extends Component {
 		504 => 'Gateway Time-out',
 	);
 
-	public $Controller;
+	public $controller;
+	public $request;
 	public $postData;
 
 	protected $_RestLog;
@@ -144,19 +145,15 @@ Class RestComponent extends Component {
 		if (is_array($config = Configure::read('Rest.settings'))) {
 			$settings = Set::merge($this->_settings, $config);
 		}
-
 		$settings = array_merge($this->settings, (array)$settings);
 
-		$this->Controller = $collection->getController();
-
-		$this->request = $this->Controller->request;
-
-		$this->_verifyControllersPath();
+		$this->controller = $collection->getController();
+		$this->request = $this->controller->request;
 
 		parent::__construct($collection, $settings);
 	}
 
-	public function initialize (&$Controller) {
+	public function initialize(&$controller) {
 		if (!$this->isActive()) {
 			return;
 		}
@@ -170,8 +167,8 @@ Class RestComponent extends Component {
 
 		// Prepare log
 		$this->log(array(
-			'controller' => $this->Controller->name,
-			'action' => $this->Controller->action,
+			'controller' => $this->controller->name,
+			'action' => $this->controller->action,
 			'model_id' => @$this->request->passedArgs[0]
 				? @$this->request->passedArgs[0]
 				: 0,
@@ -189,11 +186,11 @@ Class RestComponent extends Component {
 
 		// SSL
 		if (!empty($this->_settings['auth']['requireSecure'])) {
-			if (!isset($this->Controller->Security)
-				|| !is_object($this->Controller->Security)) {
+			if (!isset($this->controller->Security)
+				|| !is_object($this->controller->Security)) {
 				return $this->abort('You need to enable the Security component first');
 			}
-			$this->Controller->Security->requireSecure($this->_settings['auth']['requireSecure']);
+			$this->controller->Security->requireSecure($this->_settings['auth']['requireSecure']);
 		}
 
 		// Set content-headers
@@ -209,14 +206,14 @@ Class RestComponent extends Component {
 	 * @param string $name
 	 * @param array  $arguments
 	 */
-	public function  __call ($name, $arguments) {
+	public function  __call($name, $arguments) {
 		if (!isset($this->_settings['callbacks'][$name])) {
 			return $this->abort('Function does not exist: '. $name);
 		}
 
 		$cb = $this->_settings['callbacks'][$name];
 		if (is_string($cb)) {
-			$cb = array($this->Controller, $cb);
+			$cb = array($this->controller, $cb);
 		}
 
 		if (is_callable($cb)) {
@@ -229,9 +226,9 @@ Class RestComponent extends Component {
 	/**
 	 * Write the accumulated logentry
 	 *
-	 * @param <type> $Controller
+	 * @param <type> $controller
 	 */
-	public function shutdown (&$Controller) {
+	public function shutdown(&$controller) {
 		if (!$this->isActive()) {
 			return;
 		}
@@ -246,10 +243,10 @@ Class RestComponent extends Component {
 	/**
 	 * Controls layout & view files
 	 *
-	 * @param <type> $Controller
+	 * @param <type> $controller
 	 * @return <type>
 	 */
-	public function startup (&$Controller) {
+	public function startup(&$controller) {
 		if (!$this->isActive()) {
 			return;
 		}
@@ -283,12 +280,12 @@ Class RestComponent extends Component {
 		if ($this->_settings['viewsFromPlugin']) {
 			// Setup the controller so it can use
 			// the view inside this plugin
-			$this->Controller->view = 'Rest.' . $this->View(false);
+			$this->controller->view = 'Rest.' . $this->View(false);
 		}
 
 		// Dryrun
-		if (($this->Controller->_restMeta = @$_POST['meta'])) {
-			if (@$this->Controller->_restMeta['dryrun']) {
+		if (($this->controller->_restMeta = @$_POST['meta'])) {
+			if (@$this->controller->_restMeta['dryrun']) {
 				$this->warning('Dryrun active, not really executing your command');
 				$this->abort();
 			}
@@ -299,25 +296,25 @@ Class RestComponent extends Component {
 	 * Collects viewVars, reformats, and makes them available as
 	 * viewVar: response for use in REST serialization
 	 *
-	 * @param <type> $Controller
+	 * @param <type> $controller
 	 *
 	 * @return <type>
 	 */
-	public function beforeRender (&$Controller) {
+	public function beforeRender(&$controller) {
 		if (!$this->isActive()) return;
 
-		if (false === ($extract = @$this->_settings['actions'][$this->Controller->action]['extract'])) {
-			$data = $this->Controller->viewVars;
+		if (false === ($extract = @$this->_settings['actions'][$this->controller->action]['extract'])) {
+			$data = $this->controller->viewVars;
 		} else {
 			$data = $this->inject(
 				(array)$extract,
-				$this->Controller->viewVars
+				$this->controller->viewVars
 			);
 		}
 
 		$response = $this->response($data);
 
-		$this->Controller->set(compact('response'));
+		$this->controller->set(compact('response'));
 
 		// if a callback function is requested, pass the callback name to the controller
 		// responds if following query parameters present: jsoncallback, callback
@@ -332,7 +329,7 @@ Class RestComponent extends Component {
 			if (preg_match('/\W/', $callback)) {
 				return $this->abort('Prevented request. Your callback is vulnerable to XSS attacks. ');
 			}
-			$this->Controller->set('callbackFunc', $callback);
+			$this->controller->set('callbackFunc', $callback);
 		}
 	}
 
@@ -343,7 +340,7 @@ Class RestComponent extends Component {
 	 *
 	 * @return boolean
 	 */
-	public function numeric ($array = array()) {
+	public function numeric($array = array()) {
 		if (empty($array)) {
 			return null;
 		}
@@ -362,15 +359,15 @@ Class RestComponent extends Component {
 	 * @param <type> $data
 	 * @return <type>
 	 */
-	protected function _modelizePost (&$data) {
+	protected function _modelizePost(&$data) {
 		if (!is_array($data)) {
 			return $data;
 		}
 
 		// Don't throw errors if data is already modelized
 		// f.e. sending a serialized FormHelper form via ajax
-		if (isset($data[$this->Controller->modelClass])) {
-			$data = $data[$this->Controller->modelClass];
+		if (isset($data[$this->controller->modelClass])) {
+			$data = $data[$this->controller->modelClass];
 		}
 
 		// Protected against Saving multiple models in one post
@@ -384,9 +381,9 @@ Class RestComponent extends Component {
 			return $this->error('You may only send 1 dimensional posts');
 		}
 
-		// Encapsulate in Controller Model
+		// Encapsulate in controller Model
 		$data = array(
-			$this->Controller->modelClass => $data,
+			$this->controller->modelClass => $data,
 		);
 
 		return $data;
@@ -398,7 +395,7 @@ Class RestComponent extends Component {
 	 *
 	 * @return <type>
 	 */
-	public function ratelimit ($time, $max) {
+	public function ratelimit($time, $max) {
 		// No rate limit active
 		if (empty($this->_settings['ratelimit'])) {
 			return true;
@@ -457,11 +454,11 @@ Class RestComponent extends Component {
 	 *
 	 * @return object
 	 */
-	public function RestLog () {
+	public function RestLog() {
 		if (!$this->_RestLog) {
 			$this->_RestLog = ClassRegistry::init($this->_settings['log']['model']);
 			$this->_RestLog->restLogSettings = $this->_settings['log'];
-			$this->_RestLog->restLogSettings['controller'] = $this->Controller->name;
+			$this->_RestLog->restLogSettings['controller'] = $this->controller->name;
 			$this->_RestLog->Encoder = $this->View(true);
 		}
 
@@ -478,7 +475,7 @@ Class RestComponent extends Component {
 	 *
 	 * @return boolean
 	 */
-	public function log ($key, $val = null) {
+	public function log($key, $val = null) {
 		// Write log
 		if ($key === true && func_num_args() === 1) {
 			if (!@$this->_settings['log']['model']) {
@@ -533,7 +530,7 @@ Class RestComponent extends Component {
 	 *
 	 * @return <type>
 	 */
-	public function credentials ($set = false) {
+	public function credentials($set = false) {
 		// Return full credentials
 		if ($set === false) {
 			return $this->_credentials;
@@ -583,7 +580,7 @@ Class RestComponent extends Component {
 	}
 
 	/**
-	 * Returns a list of Controllers where Rest component has been activated
+	 * Returns a list of controllers where Rest component has been activated
 	 * uses Cache::read & Cache::write by default to tackle performance
 	 * issues.
 	 *
@@ -591,7 +588,7 @@ Class RestComponent extends Component {
 	 *
 	 * @return array
 	 */
-	public function controllers ($cached = true) {
+	public function controllers($cached = true) {
 		$ckey = sprintf('%s.%s', __CLASS__, __FUNCTION__);
 
 		if (!$cached || !($restControllers = Cache::read($ckey))) {
@@ -623,21 +620,21 @@ Class RestComponent extends Component {
 						continue;
 					}
 				}
-				$Controller = new $className();
+				$controller = new $className();
 
 
-				if (isset($Controller->components['Rest.Rest']['actions']) && is_array($Controller->components['Rest.Rest']['actions'])) {
+				if (isset($controller->components['Rest.Rest']['actions']) && is_array($controller->components['Rest.Rest']['actions'])) {
 					$exposeActions = array();
-					foreach ($Controller->components['Rest.Rest']['actions'] as $action => $vars) {
-						if (!in_array($action, $Controller->methods)) {
+					foreach ($controller->components['Rest.Rest']['actions'] as $action => $vars) {
+						if (!in_array($action, $controller->methods)) {
 							$this->debug(sprintf(
 								'Rest component is expecting a "%s" action but got "%s" instead. ' .
 								'You probably upgraded your component without reading the backward compatiblity ' .
 								'warnings in the readme file, or just did not implement the "%s" action in the "%s" controller yet',
-								$Controller->name,
+								$controller->name,
 								$action,
 								$action,
-								$Controller->name
+								$controller->name
 							));
 							continue;
 						}
@@ -673,7 +670,7 @@ Class RestComponent extends Component {
 
 					$restControllers[$controller] = $exposeActions;
 				}
-				unset($Controller);
+				unset($controller);
 			}
 
 			ksort($restControllers);
@@ -693,13 +690,13 @@ Class RestComponent extends Component {
 	 *
 	 * @return <type>
 	 */
-	public function headers ($ext = null) {
-		return $this->View(true, $ext)->headers($this->Controller, $this->_settings);
+	public function headers($ext = null) {
+		return $this->View(true, $ext)->headers($this->controller, $this->_settings);
 	}
 
-	public function isActive () {
+	public function isActive() {
 		if ($this->isActive === null) {
-			if (!isset($this->Controller) || !is_object($this->Controller)) {
+			if (!isset($this->controller) || !is_object($this->controller)) {
 				return false;
 			}
 
@@ -712,7 +709,7 @@ Class RestComponent extends Component {
 				}
 			}
 
-			if (!isset($this->request->params['url']['ext'])) {
+			if (!isset($this->request->params['url']['ext']) || empty($this->request->params['url']['ext'])) {
 				return false;
 			}
 
@@ -723,31 +720,31 @@ Class RestComponent extends Component {
 		}
 		return $this->isActive;
 	}
-	public function validate ($format, $arg1 = null, $arg2 = null) {
+	public function validate($format, $arg1 = null, $arg2 = null) {
 		$args = func_get_args();
 		if (count($args) > 1) $format = vsprintf($format, $args);
 		$this->_feedback['error'][] = 'validation: ' . $format;
 		return false;
 	}
-	public function error ($format, $arg1 = null, $arg2 = null) {
+	public function error($format, $arg1 = null, $arg2 = null) {
 		$args = func_get_args();
 		if (count($args) > 1) $format = vsprintf($format, $args);
 		$this->_feedback[__FUNCTION__][] = $format;
 		return false;
 	}
-	public function debug ($format, $arg1 = null, $arg2 = null) {
+	public function debug($format, $arg1 = null, $arg2 = null) {
 		$args = func_get_args();
 		if (count($args) > 1) $format = vsprintf($format, $args);
 		$this->_feedback[__FUNCTION__][] = $format;
 		return true;
 	}
-	public function info ($format, $arg1 = null, $arg2 = null) {
+	public function info($format, $arg1 = null, $arg2 = null) {
 		$args = func_get_args();
 		if (count($args) > 1) $format = vsprintf($format, $args);
 		$this->_feedback[__FUNCTION__][] = $format;
 		return true;
 	}
-	public function warning ($format, $arg1 = null, $arg2 = null) {
+	public function warning($format, $arg1 = null, $arg2 = null) {
 		$args = func_get_args();
 		if (count($args) > 1) $format = vsprintf($format, $args);
 		$this->_feedback[__FUNCTION__][] = $format;
@@ -761,7 +758,7 @@ Class RestComponent extends Component {
 	 *
 	 * @return array
 	 */
-	public function getFeedBack ($format = false) {
+	public function getFeedBack($format = false) {
 		if (!$format) {
 			return $this->_feedback;
 		}
@@ -787,7 +784,7 @@ Class RestComponent extends Component {
 	 *
 	 * @return array
 	 */
-	public function inject ($take, $viewVars) {
+	public function inject($take, $viewVars) {
 		$data = array();
 		foreach ($take as $path => $dest) {
 			if (is_numeric($path)) {
@@ -807,7 +804,7 @@ Class RestComponent extends Component {
 	 *
 	 * @return array
 	 */
-	public function response ($data = array()) {
+	public function response($data = array()) {
 		// In case of edit, return what post data was received
 		if (empty($data) && !empty($this->postData)) {
 			$data = $this->postData;
@@ -815,16 +812,16 @@ Class RestComponent extends Component {
 			// In case of add, enrich the postdata with the primary key of the
 			// added record. Nice if you e.g. first create a parent, and then
 			// immediately need the ID to add it's children
-			if (!empty($this->Controller->modelClass)) {
-				$modelClass = $this->Controller->modelClass;
-				if (!empty($data[$modelClass]) && ($Model = @$this->Controller->{$modelClass})) {
+			if (!empty($this->controller->modelClass)) {
+				$modelClass = $this->controller->modelClass;
+				if (!empty($data[$modelClass]) && ($Model = @$this->controller->{$modelClass})) {
 					if (empty($data[$modelClass][$Model->primaryKey]) && $Model->id) {
 						$data[$modelClass][$Model->primaryKey] = $Model->id;
 					}
 				}
 
 				// import validation errors
-				if (($modelErrors = @$this->Controller->{$modelClass}->validationErrors)) {
+				if (($modelErrors = @$this->controller->{$modelClass}->validationErrors)) {
 					if (is_array($modelErrors)) {
 						$modelErrors = join('; ', $modelErrors);
 					}
@@ -843,7 +840,7 @@ Class RestComponent extends Component {
 			? 'error'
 			: 'ok';
 
-		if (false === ($embed = @$this->_settings['actions'][$this->Controller->action]['embed'])) {
+		if (false === ($embed = @$this->_settings['actions'][$this->controller->action]['embed'])) {
 			$response = $data;
 		} else {
 			$response = compact('data');
@@ -897,7 +894,7 @@ Class RestComponent extends Component {
 	 *
 	 * @return mixed object or string
 	 */
-	public function View ($object = true, $ext = null) {
+	public function View($object = true, $ext = null) {
 		if (!$this->isActive()) {
 			return $this->abort(
 				'Rest not activated. Maybe try correct extension.'
@@ -917,12 +914,10 @@ Class RestComponent extends Component {
 		if (!$this->_View) {
 			$className = $base . 'View';
 
-			if (!class_exists($className)) {
-				$viewFile   = dirname(dirname(dirname(__FILE__))) . '/View/' . $className . '.php';
-				require_once $viewFile;
-			}
+			App::uses($className, 'Plugin/Rest/View');
 
 			$this->_View = ClassRegistry::init('Rest.' . $className);
+			//$this->_View = App::load($className);
 			if (empty($this->_View->params)) {
 				$this->_View->params = $this->request->params;
 			}
@@ -931,7 +926,7 @@ Class RestComponent extends Component {
 		return $this->_View;
 	}
 
-	public function beforeRedirect (&$Controller, $url, $status = null, $exit = true) {
+	public function beforeRedirect(&$controller, $url, $status = null, $exit = true) {
 		if (@$this->_settings['catchredir'] === false) {
 			return;
 		}
@@ -951,7 +946,7 @@ Class RestComponent extends Component {
 	 * @param <type> $params
 	 * @param <type> $data
 	 */
-	public function abort ($params = array(), $data = array()) {
+	public function abort($params = array(), $data = array()) {
 		if ($this->_aborting) {
 			return;
 		}
@@ -964,11 +959,11 @@ Class RestComponent extends Component {
 			$code  = '200';
 			$error = '';
 
-			if (is_object($this->Controller->Session) && @$this->Controller->Session->read('Message.auth')) {
+			if (is_object($this->controller->Session) && @$this->controller->Session->read('Message.auth')) {
 				// Automatically fetch Auth Component Errors
 				$code  = '403';
-				$error = $this->Controller->Session->read('Message.auth.message');
-				$this->Controller->Session->delete('Message.auth');
+				$error = $this->controller->Session->read('Message.auth.message');
+				$this->controller->Session->delete('Message.auth');
 			}
 
 			if (!empty($params['status'])) {
@@ -989,7 +984,7 @@ Class RestComponent extends Component {
 		if (!$message && isset($this->codes[$code])) {
 			$message = $this->codes[$code];
 		}
-		$this->Controller->header(sprintf('HTTP/1.1 %s %s', $code, $message));
+		$this->controller->header(sprintf('HTTP/1.1 %s %s', $code, $message));
 
 		$this->headers();
 		$encoded = $this->View()->encode($this->response($data));
@@ -1000,7 +995,7 @@ Class RestComponent extends Component {
 			'httpcode' => $code,
 			'error' => $error,
 		));
-		$this->shutdown($this->Controller);
+		$this->shutdown($this->controller);
 		die($encoded);
 	}
 }
