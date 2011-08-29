@@ -23,17 +23,17 @@ class RestLog extends RestAppModel {
 			}
 		}
 
-		foreach ($this->data[__CLASS__] as $field => $val) {
-			if (!is_scalar($this->data[__CLASS__][$field])) {
-				$this->data[__CLASS__][$field] = $this->Encoder->encode($this->data[__CLASS__][$field], !!@$this->restLogSettings['pretty']);
+		foreach ($this->request->data[__CLASS__] as $field => $val) {
+			if (!is_scalar($this->request->data[__CLASS__][$field])) {
+				$this->request->data[__CLASS__][$field] = $this->Encoder->encode($this->request->data[__CLASS__][$field], !!@$this->restLogSettings['pretty']);
 			}
-			if (is_null($this->data[__CLASS__][$field])) {
-				$this->data[__CLASS__][$field] = '';
+			if (is_null($this->request->data[__CLASS__][$field])) {
+				$this->request->data[__CLASS__][$field] = '';
 			}
 
 			if (isset($this->logpaths[$field])) {
-				$this->filedata[$field] = $this->data[__CLASS__][$field];
-				$this->data[__CLASS__][$field] = '# on disk at: ' . $this->logpaths[$field];
+				$this->filedata[$field] = $this->request->data[__CLASS__][$field];
+				$this->request->data[__CLASS__][$field] = '# on disk at: ' . $this->logpaths[$field];
 			}
 		}
 
@@ -57,7 +57,7 @@ class RestLog extends RestAppModel {
 		foreach ($this->filedata as $field => $val) {
 			$vars['{' . $field . '}'] = $val;
 		}
-		foreach ($this->data[__CLASS__] as $field => $val) {
+		foreach ($this->request->data[__CLASS__] as $field => $val) {
 			$vars['{' . $field . '}'] = $val;
 		}
 		foreach (array('Y', 'm', 'd', 'H', 'i', 's', 'U') as $dp) {

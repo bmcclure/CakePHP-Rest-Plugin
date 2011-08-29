@@ -1,5 +1,5 @@
 <?php
-Class RestComponent extends Object {
+Class RestComponent extends Component {
 	public $codes = array(
 		200 => 'OK',
 		400 => 'Bad Request',
@@ -365,7 +365,7 @@ Class RestComponent extends Object {
 
 		// Protected against Saving multiple models in one post
 		// while still allowing mass-updates in the form of:
-		// $this->data[1][field] = value;
+		// $this->request->data[1][field] = value;
 		if (Set::countDim($data) === 2) {
 			if (!$this->numeric($data)) {
 				return $this->error('2 dimensional can only begin with numeric index');
@@ -699,8 +699,12 @@ Class RestComponent extends Object {
 				}
 			}
 
+			if (!isset($this->Controller->request->params['url']['ext'])) {
+				return false;
+			}
+
 			return $this->isActive = in_array(
-				$this->Controller->params['url']['ext'],
+				$this->Controller->request->params['url']['ext'],
 				$this->_settings['extensions']
 			);
 		}
@@ -830,7 +834,7 @@ Class RestComponent extends Object {
 			$response = $data;
 		} else {
 			$response = compact('data');
-		}		
+		}
 
 		if ($this->_settings['meta']['enable']) {
 			$serverKeys = array_flip($this->_settings['meta']['requestKeys']);
