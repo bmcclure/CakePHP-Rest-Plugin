@@ -618,7 +618,7 @@ Class RestComponent extends Component {
 
 				$debug = false;
 				if (!class_exists($className)) {
-					App::uses($controller, 'Controller')
+					App::uses($controller, 'Controller');
 					if (!App::load($controller)) {
 						continue;
 					}
