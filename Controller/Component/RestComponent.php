@@ -618,7 +618,7 @@ Class RestComponent extends Component {
 
 				$debug = false;
 				if (!class_exists($className)) {
-					App::uses($controller, 'Controller')
+					App::uses($controller, 'Controller');
 					if (!App::load($controller)) {
 						continue;
 					}
@@ -918,14 +918,13 @@ Class RestComponent extends Component {
 			$className = $base . 'View';
 
 			if (!class_exists($className)) {
-				$pluginRoot = dirname(dirname(dirname(__FILE__)));
-				$viewFile   = $pluginRoot . '/views/' . $ext . '.php';
+				$viewFile   = dirname(dirname(dirname(__FILE__))) . '/View/' . $className . '.php';
 				require_once $viewFile;
 			}
 
 			$this->_View = ClassRegistry::init('Rest.' . $className);
 			if (empty($this->_View->params)) {
-				$this->_View->params = $this->Controller->params;
+				$this->_View->params = $this->request->params;
 			}
 		}
 
@@ -986,7 +985,11 @@ Class RestComponent extends Component {
 		if ($error) {
 			$this->error($error);
 		}
-		$this->Controller->header(sprintf('HTTP/1.1 %s %s', $code, $this->codes[$code]));
+		$message = $error;
+		if (!$message && isset($this->codes[$code])) {
+			$message = $this->codes[$code];
+		}
+		$this->Controller->header(sprintf('HTTP/1.1 %s %s', $code, $message));
 
 		$this->headers();
 		$encoded = $this->View()->encode($this->response($data));
