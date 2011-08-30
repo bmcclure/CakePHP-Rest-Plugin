@@ -914,10 +914,10 @@ Class RestComponent extends Component {
 		if (!$this->_View) {
 			$className = $base . 'View';
 
-			App::uses($className, 'Plugin/Rest/View');
+			App::uses($className, 'Rest.View');
 
-			$this->_View = ClassRegistry::init('Rest.' . $className);
-			//$this->_View = App::load($className);
+			$this->_View = new $className($this->controller);
+
 			if (empty($this->_View->params)) {
 				$this->_View->params = $this->request->params;
 			}
