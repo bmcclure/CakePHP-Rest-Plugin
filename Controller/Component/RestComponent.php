@@ -145,9 +145,11 @@ Class RestComponent extends Component {
 		if (is_array($config = Configure::read('Rest.settings'))) {
 			$settings = Set::merge($this->settings, $config);
 		}
+
 		$settings = array_merge($this->settings, (array)$settings);
 
 		$this->controller = $collection->getController();
+
 		$this->request = $this->controller->request;
 
 		parent::__construct($collection, $settings);
@@ -180,16 +182,17 @@ Class RestComponent extends Component {
 
 		// Validate & Modify Post
 		$this->postData = $this->_modelizePost($this->request->data);
+
 		if ($this->postData === false) {
 			return $this->abort('Invalid post data');
 		}
 
 		// SSL
 		if (!empty($this->settings['auth']['requireSecure'])) {
-			if (!isset($this->controller->Security)
-				|| !is_object($this->controller->Security)) {
+			if (!isset($this->controller->Security) || !is_object($this->controller->Security)) {
 				return $this->abort('You need to enable the Security component first');
 			}
+
 			$this->controller->Security->requireSecure($this->settings['auth']['requireSecure']);
 		}
 
@@ -218,6 +221,7 @@ Class RestComponent extends Component {
 
 		if (is_callable($cb)) {
 			array_unshift($arguments, $this);
+
 			return call_user_func_array($cb, $arguments);
 		}
 	}
@@ -254,10 +258,8 @@ Class RestComponent extends Component {
 		// Rate Limit
 		if (@$this->settings['ratelimit']['enable']) {
 			$credentials = $this->credentials();
-			$class = @$credentials['class'];
-			if (!$class) {
-				$this->warning('Unable to establish class');
-			} else {
+
+			if ($class = @$credentials['class']) {
 				list($time, $max) = $this->settings['ratelimit']['classlimits'][$class];
 
 				$cbMax = $this->cbRestRatelimitMax($credentials);
@@ -266,16 +268,13 @@ Class RestComponent extends Component {
 				}
 
 				if (true !== ($count = $this->ratelimit($time, $max))) {
-					$msg = sprintf(
-						'You have reached your ratelimit (%s is more than the allowed %s requests in %s)',
-						$count,
-						$max,
-						str_replace('-', '', $time)
-					);
+					$msg = sprintf('You have reached your ratelimit (%s is more than the allowed %s requests in %s)', $count, $max,	str_replace('-', '', $time));
+
 					$this->log('ratelimited', 1);
+
 					return $this->abort($msg);
 				}
-			}
+			} else $this->warning('Unable to establish class');
 		}
 		if ($this->settings['viewsFromPlugin']) {
 			// Setup the controller so it can use
@@ -301,34 +300,33 @@ Class RestComponent extends Component {
 	 * @return <type>
 	 */
 	public function beforeRender(&$controller) {
-		if (!$this->isActive()) return;
-
-		if (false === ($extract = @$this->settings['actions'][$this->controller->action]['extract'])) {
-			$data = $this->controller->viewVars;
-		} else {
-			$data = $this->inject(
-				(array)$extract,
-				$this->controller->viewVars
-			);
+		if (!$this->isActive()) {
+			return;
 		}
 
-		$response = $this->response($data);
+		$extract = @$this->settings['actions'][$this->controller->action]['extract'];
 
-		$this->controller->set(compact('response'));
+		$data = ($extract) ? $this->inject((array)$extract, $this->controller->viewVars) : $this->controller->viewVars;
+
+		$this->controller->set('response', $this->response($data));
 
 		// if a callback function is requested, pass the callback name to the controller
 		// responds if following query parameters present: jsoncallback, callback
 		$callback = false;
+
 		$json_callback_keys = array('jsoncallback', 'callback');
+
 		foreach ($json_callback_keys as $key) {
 			if (array_key_exists($key, $this->request->params['url'])) {
 				$callback = $this->request->params['url'][$key];
 			}
 		}
+
 		if ($callback) {
 			if (preg_match('/\W/', $callback)) {
 				return $this->abort('Prevented request. Your callback is vulnerable to XSS attacks. ');
 			}
+
 			$this->controller->set('callbackFunc', $callback);
 		}
 	}
@@ -346,6 +344,7 @@ Class RestComponent extends Component {
 		}
 
 		$keys = array_keys($array);
+
 		foreach ($keys as $key) {
 			if (!is_numeric($key)) {
 				return false;
@@ -394,6 +393,7 @@ Class RestComponent extends Component {
 	 * @return <type>
 	 */
 	public function ratelimit($time, $max) {
+
 		// No rate limit active
 		if (empty($this->settings['ratelimit'])) {
 			return true;
@@ -401,24 +401,21 @@ Class RestComponent extends Component {
 
 		// Need logging
 		if (empty($this->settings['log']['model'])) {
-			return $this->abort(
-				'Logging is required for any ratelimiting to work'
-			);
+			return $this->abort('Logging is required for any ratelimiting to work');
 		}
 
 		// Need identfield
 		if (empty($this->settings['ratelimit']['identfield'])) {
-			return $this->abort(
-				'Need a identfield or I will not know what to ratelimit on'
-			);
+			return $this->abort('Need a identfield or I will not know what to ratelimit on');
 		}
 
 		$userField = $this->settings['ratelimit']['identfield'];
+
 		$userId	= $this->credentials($userField);
 
 		$this->cbRestlogBeforeFind();
-		if ($userId) {
-			// If you're logged in
+
+		if ($userId) { // If you're logged in
 			$logs = $this->RestLog()->find('list', array(
 				'fields' => array('id', $userField),
 				'conditions' => array(
@@ -426,8 +423,7 @@ Class RestComponent extends Component {
 					$this->RestLog()->alias . '.' . $userField => $userId,
 				),
 			));
-		} else {
-			// IP based rate limiting
+		} else { // IP based rate limiting
 			$max  = $this->settings['ratelimit']['ip_limit'];
 			$logs = $this->RestLog()->find('list', array(
 				'fields' => array('id', $userField),
@@ -437,6 +433,7 @@ Class RestComponent extends Component {
 				),
 			));
 		}
+
 		$this->cbRestlogAfterFind();
 
 		return (count($logs) >= $max) ? $count : true;
@@ -450,8 +447,11 @@ Class RestComponent extends Component {
 	public function RestLog() {
 		if (!$this->_RestLog) {
 			$this->_RestLog = ClassRegistry::init($this->settings['log']['model']);
+
 			$this->_RestLog->restLogSettings = $this->settings['log'];
+
 			$this->_RestLog->restLogSettings['controller'] = $this->controller->name;
+
 			$this->_RestLog->Encoder = $this->View(true);
 		}
 
@@ -469,16 +469,17 @@ Class RestComponent extends Component {
 	 * @return boolean
 	 */
 	public function log($key, $val = null) {
-		// Write log
-		if ($key === true && func_num_args() === 1) {
+		if ($key === true && func_num_args() === 1) { // Write log
 			if (!@$this->settings['log']['model']) {
 				return true;
 			}
 
 			$this->RestLog()->create();
+
 			$this->cbRestlogBeforeSave();
 
 			$log = array($this->RestLog()->alias => $this->_logData);
+
 			$log = $this->cbRestlogFilter($log);
 
 			$res = (is_array($log)) ? $this->RestLog()->save($log) : null;
@@ -520,22 +521,22 @@ Class RestComponent extends Component {
 	 * @return <type>
 	 */
 	public function credentials($set = false) {
-		// Return full credentials
-		if ($set === false) {
+		if ($set === false) {// Return full credentials
 			return $this->_credentials;
 		}
 
-		// Set credentials
-		if ($set === true) {
+		if ($set === true) {// Set credentials
 			if (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
 				$parts = explode(' ', $_SERVER['HTTP_AUTHORIZATION']);
 
 				$match = array_shift($parts);
+
 				if ($match !== $this->settings['auth']['keyword']) {
 					return false;
 				}
 
 				$str = join(' ', $parts);
+
 				parse_str($str, $this->_credentials);
 
 				if (!isset($this->_credentials[$this->settings['auth']['fields']['class']])) {
@@ -552,10 +553,8 @@ Class RestComponent extends Component {
 			return $this->_credentials;
 		}
 
-		// Return 1 field
-		if (is_string($set)) {
-			// First try key as is
-			if (null !== ($val = @$this->_credentials[$set])) {
+		if (is_string($set)) { // Return 1 field
+			if (null !== ($val = @$this->_credentials[$set])) { // First try key as is
 				return $val;
 			}
 
@@ -608,7 +607,6 @@ Class RestComponent extends Component {
 
 				$controller = new $className();
 
-
 				if (isset($controller->components['Rest.Rest']['actions']) && is_array($controller->components['Rest.Rest']['actions'])) {
 					$exposeActions = array();
 
@@ -618,13 +616,12 @@ Class RestComponent extends Component {
 								'Rest component is expecting a "%s" action but got "%s" instead. ' .
 								'You probably upgraded your component without reading the backward compatiblity ' .
 								'warnings in the readme file, or just did not implement the "%s" action in the "%s" controller yet',
-								$controller->name,
-								$action,
-								$action,
-								$controller->name
+								$controller->name, $action, $action, $controller->name
 							));
+
 							continue;
 						}
+
 						$saveVars = array();
 
 						$exposeVars = array_merge(
@@ -642,16 +639,12 @@ Class RestComponent extends Component {
 									return $this->abort(sprintf(
 										'Rest maintainer needs to set "%s" for %s using ' .
 										'%s->components->Rest.Rest->actions[\'%s\'][\'%s\'] = %s',
-										$exposeVar,
-										$action,
-										$className,
-										$action,
-										$exposeVar,
-										$example
+										$exposeVar, $action, $className, $action, $exposeVar, $example
 									));
 								}
 							}
 						}
+
 						$exposeActions[$action] = $saveVars;
 					}
 
@@ -770,10 +763,7 @@ Class RestComponent extends Component {
 
 		foreach ($this->_feedback as $level => $messages) {
 			foreach ($messages as $i => $message) {
-				$feedback[] = array(
-					'message' => $message,
-					'level' => $level,
-				);
+				$feedback[] = array('message' => $message, 'level' => $level);
 			}
 		}
 
