@@ -1,8 +1,7 @@
 <?php
 class RestLog extends RestAppModel {
-
 	public $restLogSettings = array();
-	public $Encoder = null;
+	public $encoder = null;
 	public $logpaths = array();
 	public $filedata = array();
 
@@ -13,10 +12,11 @@ class RestLog extends RestAppModel {
 	 * @param <type> $options
 	 * @return <type>
 	 */
-	public function beforeSave ($options = array()) {
+	public function beforeSave($options = array()) {
 		$fields = (array)@$this->restLogSettings['fields'];
 		$this->logpaths = array();
 		$this->filedata = array();
+
 		foreach ($fields as $field => $log) {
 			if (false !== strpos($log, '.') || false !== strpos($log, '/') || false !== strpos($log, '{')) {
 				$this->logpaths[$field] = $log;
@@ -25,8 +25,9 @@ class RestLog extends RestAppModel {
 
 		foreach ($this->request->data[__CLASS__] as $field => $val) {
 			if (!is_scalar($this->request->data[__CLASS__][$field])) {
-				$this->request->data[__CLASS__][$field] = $this->Encoder->encode($this->request->data[__CLASS__][$field], !!@$this->restLogSettings['pretty']);
+				$this->request->data[__CLASS__][$field] = $this->encoder->encode($this->request->data[__CLASS__][$field], !!@$this->restLogSettings['pretty']);
 			}
+
 			if (is_null($this->request->data[__CLASS__][$field])) {
 				$this->request->data[__CLASS__][$field] = '';
 			}
@@ -47,7 +48,7 @@ class RestLog extends RestAppModel {
 	 * @param <type> $created
 	 * @return <type>
 	 */
-	public function afterSave ($created) {
+	public function afterSave($created) {
 		if (!$created) {
 			return parent::beforeSave($created);
 		}
@@ -57,9 +58,11 @@ class RestLog extends RestAppModel {
 		foreach ($this->filedata as $field => $val) {
 			$vars['{' . $field . '}'] = $val;
 		}
+
 		foreach ($this->request->data[__CLASS__] as $field => $val) {
 			$vars['{' . $field . '}'] = $val;
 		}
+
 		foreach (array('Y', 'm', 'd', 'H', 'i', 's', 'U') as $dp) {
 			$vars['{date_' . $dp . '}'] = date($dp);
 		}
@@ -70,13 +73,15 @@ class RestLog extends RestAppModel {
 
 		foreach ($this->filedata as $field => $val) {
 			$vars['{field}'] = $field;
-			$logfilepath     = $this->logpaths[$field];
 
+			$logfilepath     = $this->logpaths[$field];
 			$logfilepath = str_replace(array_keys($vars), $vars, $logfilepath);
+
 			$dir = dirname($logfilepath);
 			if (!is_dir($dir)) {
 				mkdir($dir, 0755, true);
 			}
+
 			file_put_contents($logfilepath, $val, FILE_APPEND);
 		}
 

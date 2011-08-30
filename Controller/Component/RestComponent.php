@@ -29,7 +29,7 @@ Class RestComponent extends Component {
 	protected $_credentials = array();
 	protected $_aborting    = false;
 
-	protected $_settings = array(
+	public $settings = array(
 		// Component options
 		'callbacks' => array(
 			'cbRestlogBeforeSave' => 'restlogBeforeSave',
@@ -129,7 +129,7 @@ Class RestComponent extends Component {
 				'extract' => array(),
 			),
 		),
-		'debug' => 0,
+		'debug' => 2,
 		'onlyActiveWithAuth' => false,
 		'catchredir' => false,
 	);
@@ -143,7 +143,7 @@ Class RestComponent extends Component {
 
 	public function __construct(ComponentCollection $collection, $settings = array()) {
 		if (is_array($config = Configure::read('Rest.settings'))) {
-			$settings = Set::merge($this->_settings, $config);
+			$settings = Set::merge($this->settings, $config);
 		}
 		$settings = array_merge($this->settings, (array)$settings);
 
@@ -159,8 +159,8 @@ Class RestComponent extends Component {
 		}
 
 		// Control Debug
-		$this->_settings['debug'] = (int)$this->_settings['debug'];
-		Configure::write('debug', $this->_settings['debug']);
+		$this->settings['debug'] = (int)$this->settings['debug'];
+		Configure::write('debug', $this->settings['debug']);
 
 		// Set credentials
 		$this->credentials(true);
@@ -185,12 +185,12 @@ Class RestComponent extends Component {
 		}
 
 		// SSL
-		if (!empty($this->_settings['auth']['requireSecure'])) {
+		if (!empty($this->settings['auth']['requireSecure'])) {
 			if (!isset($this->controller->Security)
 				|| !is_object($this->controller->Security)) {
 				return $this->abort('You need to enable the Security component first');
 			}
-			$this->controller->Security->requireSecure($this->_settings['auth']['requireSecure']);
+			$this->controller->Security->requireSecure($this->settings['auth']['requireSecure']);
 		}
 
 		// Set content-headers
@@ -199,7 +199,7 @@ Class RestComponent extends Component {
 
 	/**
 	 * Catch & fire callbacks. You can map callbacks to different places
-	 * using the value parts in $this->_settings['callbacks'].
+	 * using the value parts in $this->settings['callbacks'].
 	 * If the resolved callback is a string we assume it's in
 	 * the controller.
 	 *
@@ -207,11 +207,11 @@ Class RestComponent extends Component {
 	 * @param array  $arguments
 	 */
 	public function  __call($name, $arguments) {
-		if (!isset($this->_settings['callbacks'][$name])) {
+		if (!isset($this->settings['callbacks'][$name])) {
 			return $this->abort('Function does not exist: '. $name);
 		}
 
-		$cb = $this->_settings['callbacks'][$name];
+		$cb = $this->settings['callbacks'][$name];
 		if (is_string($cb)) {
 			$cb = array($this->controller, $cb);
 		}
@@ -252,13 +252,13 @@ Class RestComponent extends Component {
 		}
 
 		// Rate Limit
-		if (@$this->_settings['ratelimit']['enable']) {
+		if (@$this->settings['ratelimit']['enable']) {
 			$credentials = $this->credentials();
-			$class		 = @$credentials['class'];
+			$class = @$credentials['class'];
 			if (!$class) {
 				$this->warning('Unable to establish class');
 			} else {
-				list($time, $max) = $this->_settings['ratelimit']['classlimits'][$class];
+				list($time, $max) = $this->settings['ratelimit']['classlimits'][$class];
 
 				$cbMax = $this->cbRestRatelimitMax($credentials);
 				if ($cbMax) {
@@ -277,7 +277,7 @@ Class RestComponent extends Component {
 				}
 			}
 		}
-		if ($this->_settings['viewsFromPlugin']) {
+		if ($this->settings['viewsFromPlugin']) {
 			// Setup the controller so it can use
 			// the view inside this plugin
 			$this->controller->view = 'Rest.' . $this->View(false);
@@ -303,7 +303,7 @@ Class RestComponent extends Component {
 	public function beforeRender(&$controller) {
 		if (!$this->isActive()) return;
 
-		if (false === ($extract = @$this->_settings['actions'][$this->controller->action]['extract'])) {
+		if (false === ($extract = @$this->settings['actions'][$this->controller->action]['extract'])) {
 			$data = $this->controller->viewVars;
 		} else {
 			$data = $this->inject(
@@ -344,12 +344,14 @@ Class RestComponent extends Component {
 		if (empty($array)) {
 			return null;
 		}
+
 		$keys = array_keys($array);
 		foreach ($keys as $key) {
 			if (!is_numeric($key)) {
 				return false;
 			}
 		}
+
 		return true;
 	}
 
@@ -381,12 +383,8 @@ Class RestComponent extends Component {
 			return $this->error('You may only send 1 dimensional posts');
 		}
 
-		// Encapsulate in controller Model
-		$data = array(
-			$this->controller->modelClass => $data,
-		);
-
-		return $data;
+		// Return encapsulated in controller model
+		return array($this->controller->modelClass => $data);
 	}
 
 	/**
@@ -397,25 +395,25 @@ Class RestComponent extends Component {
 	 */
 	public function ratelimit($time, $max) {
 		// No rate limit active
-		if (empty($this->_settings['ratelimit'])) {
+		if (empty($this->settings['ratelimit'])) {
 			return true;
 		}
 
 		// Need logging
-		if (empty($this->_settings['log']['model'])) {
+		if (empty($this->settings['log']['model'])) {
 			return $this->abort(
 				'Logging is required for any ratelimiting to work'
 			);
 		}
 
 		// Need identfield
-		if (empty($this->_settings['ratelimit']['identfield'])) {
+		if (empty($this->settings['ratelimit']['identfield'])) {
 			return $this->abort(
 				'Need a identfield or I will not know what to ratelimit on'
 			);
 		}
 
-		$userField = $this->_settings['ratelimit']['identfield'];
+		$userField = $this->settings['ratelimit']['identfield'];
 		$userId	= $this->credentials($userField);
 
 		$this->cbRestlogBeforeFind();
@@ -430,7 +428,7 @@ Class RestComponent extends Component {
 			));
 		} else {
 			// IP based rate limiting
-			$max  = $this->_settings['ratelimit']['ip_limit'];
+			$max  = $this->settings['ratelimit']['ip_limit'];
 			$logs = $this->RestLog()->find('list', array(
 				'fields' => array('id', $userField),
 				'conditions' => array(
@@ -441,12 +439,7 @@ Class RestComponent extends Component {
 		}
 		$this->cbRestlogAfterFind();
 
-		$count = count($logs);
-		if ($count >= $max) {
-			return $count;
-		}
-
-		return true;
+		return (count($logs) >= $max) ? $count : true;
 	}
 
 	/**
@@ -456,8 +449,8 @@ Class RestComponent extends Component {
 	 */
 	public function RestLog() {
 		if (!$this->_RestLog) {
-			$this->_RestLog = ClassRegistry::init($this->_settings['log']['model']);
-			$this->_RestLog->restLogSettings = $this->_settings['log'];
+			$this->_RestLog = ClassRegistry::init($this->settings['log']['model']);
+			$this->_RestLog->restLogSettings = $this->settings['log'];
 			$this->_RestLog->restLogSettings['controller'] = $this->controller->name;
 			$this->_RestLog->Encoder = $this->View(true);
 		}
@@ -478,23 +471,17 @@ Class RestComponent extends Component {
 	public function log($key, $val = null) {
 		// Write log
 		if ($key === true && func_num_args() === 1) {
-			if (!@$this->_settings['log']['model']) {
+			if (!@$this->settings['log']['model']) {
 				return true;
 			}
 
 			$this->RestLog()->create();
 			$this->cbRestlogBeforeSave();
 
-			$log = array(
-				$this->RestLog()->alias => $this->_logData,
-			);
+			$log = array($this->RestLog()->alias => $this->_logData);
 			$log = $this->cbRestlogFilter($log);
 
-			if (is_array($log)) {
-				$res = $this->RestLog()->save($log);
-			} else {
-				$res = null;
-			}
+			$res = (is_array($log)) ? $this->RestLog()->save($log) : null;
 
 			$this->cbRestlogAfterSave();
 
@@ -506,11 +493,13 @@ Class RestComponent extends Component {
 			foreach ($key as $k=>$v) {
 				$this->log($k, $v);
 			}
+
 			return true;
 		}
 
 		// Single value, save
 		$this->_logData[$key] = $val;
+
 		return true;
 	}
 
@@ -540,21 +529,23 @@ Class RestComponent extends Component {
 		if ($set === true) {
 			if (!empty($_SERVER['HTTP_AUTHORIZATION'])) {
 				$parts = explode(' ', $_SERVER['HTTP_AUTHORIZATION']);
+
 				$match = array_shift($parts);
-				if ($match !== $this->_settings['auth']['keyword']) {
+				if ($match !== $this->settings['auth']['keyword']) {
 					return false;
 				}
+
 				$str = join(' ', $parts);
 				parse_str($str, $this->_credentials);
 
-				if (!isset($this->_credentials[$this->_settings['auth']['fields']['class']])) {
-					$this->_credentials[$this->_settings['auth']['fields']['class']] = $this->_settings['ratelimit']['default'];
+				if (!isset($this->_credentials[$this->settings['auth']['fields']['class']])) {
+					$this->_credentials[$this->settings['auth']['fields']['class']] = $this->settings['ratelimit']['default'];
 				}
 
 				$this->log(array(
-					'username' => $this->_credentials[$this->_settings['auth']['fields']['username']],
-					'apikey' => $this->_credentials[$this->_settings['auth']['fields']['apikey']],
-					'class' => $this->_credentials[$this->_settings['auth']['fields']['class']],
+					'username' => $this->_credentials[$this->settings['auth']['fields']['username']],
+					'apikey' => $this->_credentials[$this->settings['auth']['fields']['apikey']],
+					'class' => $this->_credentials[$this->settings['auth']['fields']['class']],
 				));
 			}
 
@@ -569,7 +560,7 @@ Class RestComponent extends Component {
 			}
 
 			// Fallback to the mapped key according to authfield settings
-			if (null !== ($val = @$this->_credentials[$this->_settings['auth']['fields'][$set]])) {
+			if (null !== ($val = @$this->_credentials[$this->settings['auth']['fields'][$set]])) {
 				return $val;
 			}
 
@@ -594,16 +585,10 @@ Class RestComponent extends Component {
 		if (!$cached || !($restControllers = Cache::read($ckey))) {
 			$restControllers = array();
 
-			if (method_exists('App', 'objects')) {
-				// As of cake 1.3, use App::objects instead of Configure::listObjects
-				// http://code.cakephp.org/wiki/1.3/migration-guide
-				$controllers = App::objects('controller', null, false);
-			} else {
-				$controllers = Configure::listObjects('controller', null, false);
-			}
+			$controllers = App::objects('controller', null, false);
 
 			// Unlist some controllers by default
-			foreach ($this->_settings['skipControllers'] as $skipController) {
+			foreach ($this->settings['skipControllers'] as $skipController) {
 				if (false !== ($key = array_search($skipController, $controllers))) {
 					unset($controllers[$key]);
 				}
@@ -615,16 +600,18 @@ Class RestComponent extends Component {
 
 				$debug = false;
 				if (!class_exists($className)) {
-					App::uses($controller, 'Controller');
-					if (!App::load($controller)) {
+					App::uses($className, 'Controller');
+					if (!App::load($className)) {
 						continue;
 					}
 				}
+
 				$controller = new $className();
 
 
 				if (isset($controller->components['Rest.Rest']['actions']) && is_array($controller->components['Rest.Rest']['actions'])) {
 					$exposeActions = array();
+
 					foreach ($controller->components['Rest.Rest']['actions'] as $action => $vars) {
 						if (!in_array($action, $controller->methods)) {
 							$this->debug(sprintf(
@@ -641,16 +628,16 @@ Class RestComponent extends Component {
 						$saveVars = array();
 
 						$exposeVars = array_merge(
-							$this->_settings['exposeVars']['*'],
-							isset($this->_settings['exposeVars'][$action]) ? $this->_settings['exposeVars'][$action] : array()
+							$this->settings['exposeVars']['*'],
+							isset($this->settings['exposeVars'][$action]) ? $this->settings['exposeVars'][$action] : array()
 						);
 
 						foreach ($exposeVars as $exposeVar => $example) {
 							if (isset($vars[$exposeVar])) {
 								$saveVars[$exposeVar] = $vars[$exposeVar];
 							} else {
-								if (isset($this->_settings['defaultVars'][$action][$exposeVar])) {
-									$saveVars[$exposeVar] = $this->_settings['defaultVars'][$action][$exposeVar];
+								if (isset($this->settings['defaultVars'][$action][$exposeVar])) {
+									$saveVars[$exposeVar] = $this->settings['defaultVars'][$action][$exposeVar];
 								} else {
 									return $this->abort(sprintf(
 										'Rest maintainer needs to set "%s" for %s using ' .
@@ -670,6 +657,7 @@ Class RestComponent extends Component {
 
 					$restControllers[$controller] = $exposeActions;
 				}
+
 				unset($controller);
 			}
 
@@ -691,7 +679,7 @@ Class RestComponent extends Component {
 	 * @return <type>
 	 */
 	public function headers($ext = null) {
-		return $this->View(true, $ext)->headers($this->controller, $this->_settings);
+		return $this->View(true, $ext)->headers($this->controller, $this->settings);
 	}
 
 	public function isActive() {
@@ -700,54 +688,69 @@ Class RestComponent extends Component {
 				return false;
 			}
 
-			if ($this->_settings['onlyActiveWithAuth'] === true) {
-				$keyword = $this->_settings['auth']['keyword'];
-				if ($keyword && strpos(@$_SERVER['HTTP_AUTHORIZATION'], $keyword) === 0) {
-					return $this->isActive = true;
-				} else {
-					return $this->isActive = false;
-				}
+			if ($this->settings['onlyActiveWithAuth'] === true) {
+				$keyword = $this->settings['auth']['keyword'];
+
+				return $this->isActive = ($keyword && strpos(@$_SERVER['HTTP_AUTHORIZATION'], $keyword) === 0);
 			}
 
 			if (!isset($this->request->params['url']['ext']) || empty($this->request->params['url']['ext'])) {
 				return false;
 			}
 
-			return $this->isActive = in_array(
-				$this->request->params['url']['ext'],
-				$this->_settings['extensions']
-			);
+			return $this->isActive = in_array($this->request->params['url']['ext'], $this->settings['extensions']);
 		}
+
 		return $this->isActive;
 	}
+
 	public function validate($format, $arg1 = null, $arg2 = null) {
 		$args = func_get_args();
+
 		if (count($args) > 1) $format = vsprintf($format, $args);
+
 		$this->_feedback['error'][] = 'validation: ' . $format;
+
 		return false;
 	}
+
 	public function error($format, $arg1 = null, $arg2 = null) {
 		$args = func_get_args();
+
 		if (count($args) > 1) $format = vsprintf($format, $args);
+
 		$this->_feedback[__FUNCTION__][] = $format;
+
 		return false;
 	}
+
 	public function debug($format, $arg1 = null, $arg2 = null) {
 		$args = func_get_args();
+
 		if (count($args) > 1) $format = vsprintf($format, $args);
+
 		$this->_feedback[__FUNCTION__][] = $format;
+
 		return true;
 	}
+
 	public function info($format, $arg1 = null, $arg2 = null) {
 		$args = func_get_args();
+
 		if (count($args) > 1) $format = vsprintf($format, $args);
+
 		$this->_feedback[__FUNCTION__][] = $format;
+
 		return true;
 	}
+
 	public function warning($format, $arg1 = null, $arg2 = null) {
 		$args = func_get_args();
+
 		if (count($args) > 1) $format = vsprintf($format, $args);
+
 		$this->_feedback[__FUNCTION__][] = $format;
+
 		return false;
 	}
 
@@ -764,6 +767,7 @@ Class RestComponent extends Component {
 		}
 
 		$feedback = array();
+
 		foreach ($this->_feedback as $level => $messages) {
 			foreach ($messages as $i => $message) {
 				$feedback[] = array(
@@ -786,6 +790,7 @@ Class RestComponent extends Component {
 	 */
 	public function inject($take, $viewVars) {
 		$data = array();
+
 		foreach ($take as $path => $dest) {
 			if (is_numeric($path)) {
 				$path = $dest;
@@ -814,9 +819,10 @@ Class RestComponent extends Component {
 			// immediately need the ID to add it's children
 			if (!empty($this->controller->modelClass)) {
 				$modelClass = $this->controller->modelClass;
-				if (!empty($data[$modelClass]) && ($Model = @$this->controller->{$modelClass})) {
-					if (empty($data[$modelClass][$Model->primaryKey]) && $Model->id) {
-						$data[$modelClass][$Model->primaryKey] = $Model->id;
+
+				if (!empty($data[$modelClass]) && ($model = @$this->controller->{$modelClass})) {
+					if (empty($data[$modelClass][$model->primaryKey]) && $model->id) {
+						$data[$modelClass][$model->primaryKey] = $model->id;
 					}
 				}
 
@@ -825,35 +831,34 @@ Class RestComponent extends Component {
 					if (is_array($modelErrors)) {
 						$modelErrors = join('; ', $modelErrors);
 					}
+
 					$this->validate($modelErrors);
 				}
 			}
-
 		}
+
 		$feedback = $this->getFeedBack(true);
 
-		$hasErrors           = count(@$this->_feedback['error']);
+		$hasErrors = count(@$this->_feedback['error']);
 		$hasValidationErrors = count(@$this->_feedback['validate']);
 
-		$time   = time();
-		$status = ($hasErrors || $hasValidationErrors)
-			? 'error'
-			: 'ok';
+		$time = time();
+		$status = ($hasErrors || $hasValidationErrors) ? 'error' : 'ok';
 
-		if (false === ($embed = @$this->_settings['actions'][$this->controller->action]['embed'])) {
-			$response = $data;
-		} else {
-			$response = compact('data');
-		}
+		$response = (false === ($embed = @$this->settings['actions'][$this->controller->action]['embed'])) ? $data : compact('data');
 
-		if ($this->_settings['meta']['enable']) {
-			$serverKeys = array_flip($this->_settings['meta']['requestKeys']);
+		if ($this->settings['meta']['enable']) {
+			$serverKeys = array_flip($this->settings['meta']['requestKeys']);
+
 			$server = array_intersect_key($_SERVER, $serverKeys);
+
 			foreach ($server as $k=>$v) {
 				if ($k === ($lc = strtolower($k))) {
 					continue;
 				}
+
 				$server[$lc] = $v;
+
 				unset($server[$k]);
 			}
 
@@ -865,8 +870,9 @@ Class RestComponent extends Component {
 				'time_epoch' => gmdate('U', $time),
 				'time_local' => date('r', $time),
 			);
-			if (!empty($this->_settings['version'])) {
-				$response['meta']['version'] = $this->_settings['version'];
+
+			if (!empty($this->settings['version'])) {
+				$response['meta']['version'] = $this->settings['version'];
 			}
 
 			foreach ($this->_settings['auth']['fields'] as $field) {
@@ -878,9 +884,11 @@ Class RestComponent extends Component {
 			'data_in' => $this->postData,
 			'data_out' => $data,
 		);
-		if ($this->_settings['meta']['enable']) {
+
+		if ($this->settings['meta']['enable']) {
 			$dump['meta'] = $response['meta'];
 		}
+
 		$this->log($dump);
 
 		return $response;
@@ -896,9 +904,7 @@ Class RestComponent extends Component {
 	 */
 	public function View($object = true, $ext = null) {
 		if (!$this->isActive()) {
-			return $this->abort(
-				'Rest not activated. Maybe try correct extension.'
-			);
+			return $this->abort('Rest not activated. Maybe try correct extension.');
 		}
 
 		if ($ext === null) {
@@ -906,6 +912,7 @@ Class RestComponent extends Component {
 		}
 
 		$base = Inflector::camelize($ext);
+
 		if (!$object) {
 			return $base;
 		}
@@ -918,6 +925,8 @@ Class RestComponent extends Component {
 
 			$this->_View = new $className($this->controller);
 
+			$this->controller->viewClass = $base;
+
 			if (empty($this->_View->params)) {
 				$this->_View->params = $this->request->params;
 			}
@@ -927,15 +936,18 @@ Class RestComponent extends Component {
 	}
 
 	public function beforeRedirect(&$controller, $url, $status = null, $exit = true) {
-		if (@$this->_settings['catchredir'] === false) {
+		if (@$this->settings['catchredir'] === false) {
 			return;
 		}
 
 		if (!$this->isActive()) {
 			return true;
 		}
-		$redirect = true;
+
+		$redirect = true; // Where is this even used?
+
 		$this->abort(compact('url', 'status', 'exit', 'redirect'));
+
 		return false;
 	}
 
@@ -950,18 +962,19 @@ Class RestComponent extends Component {
 		if ($this->_aborting) {
 			return;
 		}
+
 		$this->_aborting = true;
 
 		if (is_string($params)) {
-			$code  = '403';
+			$code = '403';
 			$error = $params;
 		} else {
-			$code  = '200';
+			$code = '200';
 			$error = '';
 
 			if (is_object($this->controller->Session) && @$this->controller->Session->read('Message.auth')) {
 				// Automatically fetch Auth Component Errors
-				$code  = '403';
+				$code = '403';
 				$error = $this->controller->Session->read('Message.auth.message');
 				$this->controller->Session->delete('Message.auth');
 			}
@@ -969,6 +982,7 @@ Class RestComponent extends Component {
 			if (!empty($params['status'])) {
 				$code = $params['status'];
 			}
+
 			if (!empty($params['error'])) {
 				$error = $params['error'];
 			}
@@ -977,16 +991,17 @@ Class RestComponent extends Component {
 				$this->debug('Redirect prevented by rest component. ');
 			}
 		}
+
 		if ($error) {
 			$this->error($error);
 		}
-		$message = $error;
-		if (!$message && isset($this->codes[$code])) {
-			$message = $this->codes[$code];
-		}
+
+		$message = (!$error && isset($this->codes[$code])) ? $this->codes[$code] : $error;
+
 		$this->controller->header(sprintf('HTTP/1.1 %s %s', $code, $message));
 
 		$this->headers();
+
 		$encoded = $this->View()->encode($this->response($data));
 
 		// Die.. ugly. but very safe. which is what we need
@@ -995,7 +1010,9 @@ Class RestComponent extends Component {
 			'httpcode' => $code,
 			'error' => $error,
 		));
+
 		$this->shutdown($this->controller);
+
 		die($encoded);
 	}
 }
